@@ -317,6 +317,11 @@ let addShippingInfoToOrder : AddShippingInfoToOrder  =
 // VIP shipping step
 // ---------------------------
 
+let (|Us|International|) (address:Address) =
+    match address with
+    | UsLocalState | UsRemoteState -> Us
+    | International -> International
+
 /// Update the shipping cost if customer is VIP
 let freeVipShipping : FreeVipShipping =
     fun order ->
@@ -327,7 +332,10 @@ let freeVipShipping : FreeVipShipping =
                 order.ShippingInfo
             | Vip ->
                 {order.ShippingInfo with
-                    ShippingCost = Price.unsafeCreate 0.0M
+                    ShippingCost =
+                        match order.PricedOrder.ShippingAddress with
+                        | Us -> Price.unsafeCreate 0.0M
+                        | International -> order.ShippingInfo.ShippingCost
                     ShippingMethod = Fedex24 }
 
         {order with ShippingInfo = updatedShippingInfo }
