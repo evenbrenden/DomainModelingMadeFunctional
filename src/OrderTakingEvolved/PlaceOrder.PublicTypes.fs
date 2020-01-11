@@ -47,6 +47,7 @@ type UnvalidatedOrder = {
     ShippingAddress : UnvalidatedAddress
     BillingAddress : UnvalidatedAddress
     Lines : UnvalidatedOrderLine list
+    MaxShipmentSize : int option
     PromotionCode : string
     }
 
@@ -70,10 +71,12 @@ type ShippableOrderLine = {
     Quantity : OrderQuantity
     }
 
+type Shipment = ShippableOrderLine list
+
 type ShippableOrderPlaced = {
     OrderId : OrderId
     ShippingAddress : Address
-    ShipmentLines : ShippableOrderLine list
+    Shipments : Shipment list
     Pdf : PdfAttachment
 }
 

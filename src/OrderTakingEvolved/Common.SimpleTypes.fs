@@ -68,8 +68,9 @@ type PdfAttachment = {
     Bytes: byte[]
     }
 
-type PromotionCode = PromotionCode of string
+type MaxShipmentSize = private MaxShipmentSize of int
 
+type PromotionCode = PromotionCode of string
 
 // ===============================
 // Reusable constructors and getters for constrained types
@@ -370,3 +371,15 @@ module BillingAmount =
     let sumPrices prices =
         let total = prices |> List.map Price.value |> List.sum
         create total
+
+module MaxShipmentSize =
+
+    let value (MaxShipmentSize s) = s
+
+    let create fieldName s =
+        let minVal = 1
+        if s < minVal then
+            let msg = sprintf "%s: Must not be less than %d" fieldName minVal
+            Error msg
+        else
+            Ok (MaxShipmentSize s)

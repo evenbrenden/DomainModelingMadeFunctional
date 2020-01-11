@@ -46,6 +46,7 @@ type ValidatedOrder = {
     ShippingAddress : Address
     BillingAddress : Address
     Lines : ValidatedOrderLine list
+    MaxShipmentSize : int option
     PricingMethod : PricingMethod
     }
 
@@ -98,6 +99,7 @@ type PricedOrder = {
     BillingAddress : Address
     AmountToBill : BillingAmount
     Lines : PricedOrderLine list
+    MaxShipmentSize : int option
     PricingMethod : PricingMethod
     }
 
@@ -121,6 +123,18 @@ type ShippingInfo = {
     ShippingCost : Price
     }
 
+type Shipment = PricedOrderLine list
+
+type PricedOrderSplitIntoMultipleShipments = {
+    OrderId : OrderId
+    CustomerInfo : CustomerInfo
+    ShippingAddress : Address
+    BillingAddress : Address
+    AmountToBill : BillingAmount
+    Shipments : Shipment list
+    PricingMethod : PricingMethod
+    }
+
 type PricedOrderWithShippingMethod = {
     ShippingInfo : ShippingInfo
     PricedOrder : PricedOrder
@@ -140,6 +154,13 @@ type AddShippingInfoToOrder =
 
 type FreeVipShipping =
     PricedOrderWithShippingMethod -> PricedOrderWithShippingMethod
+
+// -----------------------------------
+// Split order into multiple shipments
+// -----------------------------------
+
+type SplitOrderIntoMultipleShipments =
+    PricedOrder -> PricedOrderSplitIntoMultipleShipments
 
 // ---------------------------
 // Send OrderAcknowledgment
@@ -178,7 +199,7 @@ type AcknowledgeOrder =
 // ---------------------------
 
 type CreateEvents =
-    PricedOrder                           // input
+    PricedOrderSplitIntoMultipleShipments // input
      -> OrderAcknowledgmentSent option    // input (event from previous step)
      -> PlaceOrderEvent list              // output
 

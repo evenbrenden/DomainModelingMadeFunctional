@@ -242,6 +242,7 @@ type OrderFormDto = {
     ShippingAddress : AddressDto
     BillingAddress : AddressDto
     Lines : OrderFormLineDto list
+    MaxShipmentSize : int option
     PromotionCode: string
     }
 
@@ -257,6 +258,7 @@ module internal OrderFormDto =
         ShippingAddress = dto.ShippingAddress |> AddressDto.toUnvalidatedAddress
         BillingAddress = dto.BillingAddress |> AddressDto.toUnvalidatedAddress
         Lines = dto.Lines |> List.map OrderLineDto.toUnvalidatedOrderLine
+        MaxShipmentSize = dto.MaxShipmentSize
         PromotionCode = dto.PromotionCode
         }
 
@@ -271,11 +273,13 @@ type ShippableOrderLineDto = {
     Quantity : decimal
     }
 
+type ShipmentDto = ShippableOrderLineDto list
+
 /// Event to send to shipping context
 type ShippableOrderPlacedDto = {
     OrderId : string
     ShippingAddress : AddressDto
-    ShipmentLines : ShippableOrderLineDto list
+    Shipments: ShipmentDto list
     Pdf : PdfAttachment
     }
 
@@ -293,7 +297,7 @@ module internal ShippableOrderPlacedDto =
         {
         OrderId = domainObj.OrderId |> OrderId.value
         ShippingAddress = domainObj.ShippingAddress |> AddressDto.fromAddress
-        ShipmentLines = domainObj.ShipmentLines |> List.map fromShippableOrderLine
+        Shipments = domainObj.Shipments |> (List.map >> List.map) fromShippableOrderLine
         Pdf = domainObj.Pdf
         }
 

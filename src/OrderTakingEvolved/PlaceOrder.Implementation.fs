@@ -162,6 +162,11 @@ let toValidatedOrderLine checkProductExists (unvalidatedOrderLine:UnvalidatedOrd
         return validatedOrderLine
     }
 
+let toMaxShipmentSize maxShipmentSize =
+    maxShipmentSize
+    |> MaxShipmentSize.create "MaxShipmentSize"
+    |> Result.mapError ValidationError
+
 let validateOrder : ValidateOrder =
     fun checkProductCodeExists checkAddressExists unvalidatedOrder ->
         asyncResult {
@@ -192,6 +197,9 @@ let validateOrder : ValidateOrder =
                 |> List.map (toValidatedOrderLine checkProductCodeExists)
                 |> Result.sequence // convert list of Results to a single Result
                 |> AsyncResult.ofResult
+            let maxShipmentSize =
+                unvalidatedOrder.MaxShipmentSize
+                |> Option.map (toMaxShipmentSize >> AsyncResult.ofResult)
             let pricingMethod =
                 unvalidatedOrder.PromotionCode
                 |> PricingModule.createPricingMethod
@@ -202,6 +210,7 @@ let validateOrder : ValidateOrder =
                 ShippingAddress = shippingAddress
                 BillingAddress = billingAddress
                 Lines = lines
+                MaxShipmentSize = unvalidatedOrder.MaxShipmentSize
                 PricingMethod = pricingMethod
             }
             return validatedOrder
@@ -270,6 +279,7 @@ let priceOrder : PriceOrder =
                 ShippingAddress = validatedOrder.ShippingAddress
                 BillingAddress = validatedOrder.BillingAddress
                 Lines = lines
+                MaxShipmentSize = validatedOrder.MaxShipmentSize
                 AmountToBill = amountToBill
                 PricingMethod = validatedOrder.PricingMethod
             }
@@ -340,6 +350,25 @@ let freeVipShipping : FreeVipShipping =
 
         {order with ShippingInfo = updatedShippingInfo }
 
+// -----------------------------------
+// Split order into multiple shipments
+// -----------------------------------2
+
+let splitOrderIntoMultipleShipments : SplitOrderIntoMultipleShipments =
+    fun pricedOrder ->
+        {
+        OrderId = pricedOrder.OrderId
+        CustomerInfo = pricedOrder.CustomerInfo
+        ShippingAddress = pricedOrder.ShippingAddress
+        BillingAddress = pricedOrder.BillingAddress
+        AmountToBill = pricedOrder.AmountToBill
+        Shipments =
+            match pricedOrder.MaxShipmentSize with
+            | Some s ->
+                pricedOrder.Lines |> List.chunkBySize s
+            | None -> List.singleton pricedOrder.Lines
+        PricingMethod = pricedOrder.PricingMethod
+        }
 
 // ---------------------------
 // AcknowledgeOrder step
@@ -382,12 +411,11 @@ let makeShipmentLine (line: PricedOrderLine) : ShippableOrderLine option =
     | CommentLine _ ->
         None
 
-
-let createShippingEvent (placedOrder:PricedOrder) : ShippableOrderPlaced =
+let createShippingEvent (placedOrder:PricedOrderSplitIntoMultipleShipments) : ShippableOrderPlaced =
     {
     OrderId = placedOrder.OrderId
     ShippingAddress = placedOrder.ShippingAddress
-    ShipmentLines = placedOrder.Lines |> List.choose makeShipmentLine
+    Shipments = placedOrder.Shipments |> (List.choose >> List.map) makeShipmentLine
     Pdf =
         {
         Name = sprintf "Order%s.pdf" (placedOrder.OrderId |> OrderId.value)
@@ -395,7 +423,7 @@ let createShippingEvent (placedOrder:PricedOrder) : ShippableOrderPlaced =
         }
     }
 
-let createBillingEvent (placedOrder:PricedOrder) : BillableOrderPlaced option =
+let createBillingEvent (placedOrder:PricedOrderSplitIntoMultipleShipments) : BillableOrderPlaced option =
     let billingAmount = placedOrder.AmountToBill |> BillingAmount.value
     if billingAmount > 0M then
         {
@@ -459,13 +487,16 @@ let placeOrder
                 priceOrder getProductPrice validatedOrder
                 |> AsyncResult.ofResult
                 |> AsyncResult.mapError PlaceOrderError.Pricing
-            let pricedOrderWithShipping =
+            let pricedOrderWithShippingInfo =
                 pricedOrder
                 |> addShippingInfoToOrder calculateShippingCost
                 |> freeVipShipping
+            let pricedOrderWithShipments =
+                pricedOrder
+                |> splitOrderIntoMultipleShipments
             let acknowledgementOption =
-                acknowledgeOrder createOrderAcknowledgmentLetter sendOrderAcknowledgment pricedOrderWithShipping
+                acknowledgeOrder createOrderAcknowledgmentLetter sendOrderAcknowledgment pricedOrderWithShippingInfo
             let events =
-                createEvents pricedOrder acknowledgementOption
+                createEvents pricedOrderWithShipments acknowledgementOption
             return events
         }
